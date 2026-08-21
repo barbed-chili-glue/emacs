@@ -1511,6 +1511,16 @@ Do not change my meaning, style, or word choice.
 Return only the corrected text. If no errors are found, return the text unchanged."
   "System prompt for LLM-based proofreading.")
 
+;; Capture the Ollama backend for proofreading so it doesn't depend on
+;; which backend gptel-backend is currently set to
+(defvar gptel-ollama-backend
+  (when (executable-find "ollama")
+    (gptel-make-ollama "Ceri*ollama"
+      :host "localhost:11434"
+      :stream t
+      :models '(qwen3-coder:30b qwen3.8:27b-mlx qwen3:4b gemma4:e4b-mlx gemma4:31b-mlx gemma4:latest)))
+  "Dedicated Ollama backend for proofreading functions.")
+
 (defun gptel-proofread-buffer ()
   "Proofread the current buffer (or active region) for spelling and grammar.
 Uses Qwen3 4B via Ollama. Sends the text to the LLM and displays
@@ -1521,6 +1531,7 @@ the corrected version in a temporary buffer."
                  (buffer-substring-no-properties (point-min) (point-max))))
          (prompt (concat gptel-proofread-prompt "\n\n" text)))
     (gptel-request prompt
+      :backend gptel-ollama-backend
       :model 'qwen3:4b
       :stream nil
       :system gptel-proofread-prompt
@@ -1545,6 +1556,7 @@ Uses Qwen3 4B via Ollama."
            (text (buffer-substring-no-properties beg end))
            (prompt (concat gptel-proofread-prompt "\n\n" text)))
       (gptel-request prompt
+        :backend gptel-ollama-backend
         :model 'qwen3:4b
         :stream nil
         :system gptel-proofread-prompt
