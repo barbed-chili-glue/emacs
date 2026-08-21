@@ -1493,7 +1493,8 @@ Return non-nil if the buffer was actually modified."
 ;; See https://dev.languagetool.org/finding-errors-using-n-gram-data.html
 (use-package langtool
   :config
-  (setq langtool-http-server "localhost:8081"
+  (setq langtool-http-server-host "localhost"
+        langtool-http-server-port 8081
         langtool-default-language "en-GB")
   (global-set-key (kbd "C-c g c") 'langtool-check)
   (global-set-key (kbd "C-c g r") 'langtool-correct-at-point)
