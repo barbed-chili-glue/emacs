@@ -1519,15 +1519,20 @@ the corrected version in a temporary buffer."
   (let* ((text (if (use-region-p)
                    (buffer-substring-no-properties (region-beginning) (region-end))
                  (buffer-substring-no-properties (point-min) (point-max))))
-         (gptel-model 'qwen3:4b)
-         (gptel-include-reasoning nil)
-         (prompt (concat gptel-proofread-prompt "\n\n" text))
-         (result (gptel--quick-fetch prompt)))
-    (with-current-buffer (get-buffer-create "*gptel-proofread*")
-      (erase-buffer)
-      (insert result)
-      (display-buffer (current-buffer)))
-    (message "Proofread complete — see *gptel-proofread* buffer")))
+         (prompt (concat gptel-proofread-prompt "\n\n" text)))
+    (gptel-request prompt
+      :model 'qwen3:4b
+      :stream nil
+      :system gptel-proofread-prompt
+      :callback (lambda (response info)
+                  (if response
+                      (with-current-buffer (get-buffer-create "*gptel-proofread*")
+                        (erase-buffer)
+                        (insert response)
+                        (display-buffer (current-buffer))
+                        (message "Proofread complete — see *gptel-proofread* buffer"))
+                    (message "Proofread failed: %s" (plist-get info :error)))))
+    (message "Proofreading...")))
 
 (defun gptel-proofread-apply ()
   "Proofread the active region and replace it with the corrected text.
@@ -1535,14 +1540,24 @@ Uses Qwen3 4B via Ollama."
   (interactive)
   (if (not (use-region-p))
       (message "Select a region first")
-    (let* ((text (buffer-substring-no-properties (region-beginning) (region-end)))
-           (gptel-model 'qwen3:4b)
-           (gptel-include-reasoning nil)
-           (prompt (concat gptel-proofread-prompt "\n\n" text))
-           (result (gptel--quick-fetch prompt)))
-      (delete-region (region-beginning) (region-end))
-      (insert result)
-      (message "Proofread applied"))))
+    (let* ((beg (region-beginning))
+           (end (region-end))
+           (text (buffer-substring-no-properties beg end))
+           (prompt (concat gptel-proofread-prompt "\n\n" text)))
+      (gptel-request prompt
+        :model 'qwen3:4b
+        :stream nil
+        :system gptel-proofread-prompt
+        :callback (lambda (response info)
+                    (if response
+                        (with-current-buffer (current-buffer)
+                          (save-excursion
+                            (delete-region beg end)
+                            (goto-char beg)
+                            (insert response))
+                          (message "Proofread applied"))
+                      (message "Proofread failed: %s" (plist-get info :error)))))
+      (message "Proofreading..."))))
 
 (global-set-key (kbd "C-c g p") 'gptel-proofread-buffer)
 (global-set-key (kbd "C-c g a") 'gptel-proofread-apply)
