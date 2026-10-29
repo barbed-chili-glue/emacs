@@ -3141,35 +3141,72 @@ where KEY is optional.")
   (setq-local truncate-lines t)
   (setq-local revert-buffer-function #'my/services-refresh))
 
-(defun my/dashboard ()
-  "Arrange the initial frame: services on the left, agenda on the right.
+(defun my/agenda-buffer ()
+  "Return the day agenda buffer, or nil if it cannot be built.
 
-Runs once, from `window-setup-hook'."
+The window configuration is restored afterwards, so building the
+agenda does not disturb the layout in progress."
+  (condition-case err
+      (save-window-excursion
+        (my/agenda-day)
+        (get-buffer "*Org Agenda*"))
+    (error
+     (message "Dashboard: %s" (error-message-string err))
+     nil)))
+
+(defun my/scratch-buffer ()
+  "Return the *scratch* buffer.
+
+A newly created buffer starts in `lisp-interaction-mode', as a fresh
+Emacs does."
+  (let ((new (null (get-buffer "*scratch*"))))
+    (with-current-buffer (get-buffer-create "*scratch*")
+      (when (and new (zerop (buffer-size)))
+        (lisp-interaction-mode))
+      (current-buffer))))
+
+(defun my/main-window ()
+  "Return a live window of the selected frame that is not a side window."
+  (or (seq-find (lambda (window)
+                  (null (window-parameter window 'window-side)))
+                (window-list nil 'no-minibuffer))
+      (selected-window)))
+
+(defun my/dashboard ()
+  "Arrange the frame: services on the left, agenda and scratch on the right.
+
+The agenda sits above scratch.  Run it from `C-c b b' to rebuild the
+layout after moving windows around."
   (interactive)
+  (let ((main (my/main-window)))
+    (select-window main)
+    (delete-other-windows)
+    (switch-to-buffer (or (my/agenda-buffer) (my/scratch-buffer)))
+    (split-window-below)
+    (with-selected-window (next-window)
+      (switch-to-buffer (my/scratch-buffer)))
+    (display-buffer (my/services-refresh)
+                    '((display-buffer-in-side-window)
+                      (side . left)
+                      (slot . 0)
+                      (window-width . 36)
+                      (window-parameters . ((no-other-window . t)))))
+    (select-window main)))
+
+(defun my/dashboard-startup ()
+  "Build the dashboard for the initial frame, if there is one.
+
+`window-setup-hook' also runs in daemon mode, before any frame exists."
   (when (display-graphic-p)
-    (let ((services (my/services-refresh)))
-      (display-buffer services
-                      '((display-buffer-in-side-window)
-                        (side . left)
-                        (slot . 0)
-                        (window-width . 36)
-                        (window-parameters . ((no-other-window . t))))))))
+    (my/dashboard)))
 
 (defun my/startup-buffer ()
-  "Return the buffer the initial frame should show.
-
-Fall back to *scratch* if the agenda cannot be built, so a missing
-agenda file does not abort startup."
-  (condition-case err
-      (progn
-        (my/agenda-day)
-        (or (get-buffer "*Org Agenda*") (get-buffer-create "*scratch*")))
-    (error (message "Dashboard: %s" (error-message-string err))
-           (get-buffer-create "*scratch*"))))
+  "Return the buffer the initial frame should show."
+  (or (my/agenda-buffer) (my/scratch-buffer)))
 
 (setq initial-buffer-choice #'my/startup-buffer)
 
-(add-hook 'window-setup-hook #'my/dashboard)
+(add-hook 'window-setup-hook #'my/dashboard-startup)
 
 ;;  **********************
 ;;; * Global Keybindings *
